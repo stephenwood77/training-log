@@ -661,6 +661,67 @@ function renderHistory(){
   }).join('');
 }
 
+
+/* ---- readable summary, for pasting into a conversation ---- */
+function totalReps(sets){ return sets.reduce((t,x)=>t+(x.r||0),0); }
+function trendVs(prev, curr, exId){
+  const a = topSet(prev.entries[exId]), b = topSet(curr.entries[exId]);
+  if(!a || !b) return '';
+  const ra = totalReps(prev.entries[exId]), rb = totalReps(curr.entries[exId]);
+  if(b.w > a.w) return rb >= ra ? '  ↑ heavier' : '  ↑ heavier, fewer reps';
+  if(b.w < a.w) return rb > ra ? '  ↓ lighter, more reps' : '  ↓ lighter';
+  if(rb > ra) return '  ↑ more reps';
+  if(rb < ra) return '  ↓ fewer reps';
+  return '  = same';
+}
+function buildSummary(){
+  const L = [];
+  const today = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  L.push(`TRAINING LOG · ${today} · ${weekLabel()}`);
+  L.push(`${sessions.length} session${sessions.length===1?'':'s'} logged`);
+
+  const bw = [...weights].sort((a,b)=> new Date(a.date)-new Date(b.date));
+  if(bw.length){
+    const latest = bw[bw.length-1];
+    L.push(`Bodyweight ${latest.kg.toFixed(1)} kg on ${fmtDate(latest.date)} · ${bw.length} weigh-in${bw.length===1?'':'s'}`);
+  }
+
+  DAYKEYS.forEach(k=>{
+    const day = PLAN[k];
+    const lines = [];
+    day.ex.forEach(ex=>{
+      const hist = historyFor(ex.id);
+      if(!hist.length) return;
+      const recent = hist.slice(-4);
+      lines.push(ex.n + (ex.assist ? '  [assisted — less assist is better]' : ''));
+      recent.forEach((sn,i)=>{
+        const t = i>0 ? trendVs(recent[i-1], sn, ex.id) : '';
+        lines.push(`   ${fmtDate(sn.date)}  ${setsText(sn.entries[ex.id], ex.assist)}${t}`);
+      });
+    });
+    if(lines.length){
+      L.push('');
+      L.push(`── ${day.label.toUpperCase()} · ${day.sub} ──`);
+      L.push(...lines);
+    }
+  });
+
+  const noted = sessions.filter(sn=>sn.note).slice(-6);
+  if(noted.length){
+    L.push('');
+    L.push('── NOTES ──');
+    noted.forEach(sn=> L.push(`   ${fmtDate(sn.date)} · ${PLAN[sn.day].label} — ${sn.note}`));
+  }
+
+  const missing = [];
+  DAYKEYS.forEach(k=>{ if(!sessions.some(sn=>sn.day===k)) missing.push(PLAN[k].label); });
+  if(missing.length){
+    L.push('');
+    L.push('Not yet logged: ' + missing.join(', '));
+  }
+  return L.join('\n');
+}
+
 /* ============================ RENDER: BODY ============================ */
 function renderBody(){
   const el = document.getElementById('tab-body');
@@ -732,13 +793,17 @@ function renderBody(){
         ${sessions.length} session${sessions.length===1?'':'s'} and ${weights.length} weigh-in${weights.length===1?'':'s'} currently held.
       </div>
       <div class="inline" style="margin-top:0">
-        <button id="recheck" style="flex:1;padding:10px 12px">Check saving</button>
+        <button id="doSummary" style="flex:1;padding:10px 12px">Copy summary</button>
         <button id="doExport" style="flex:1;padding:10px 12px">Show backup</button>
+      </div>
+      <div class="hmeta" style="text-transform:none;letter-spacing:0;color:var(--ink-faint);margin-top:8px">
+        Summary is the readable one — paste it to Claude. Backup is the raw copy, for moving phones.
       </div>
       <textarea class="noteb" id="dataBox" style="margin-top:10px;min-height:90px;font-size:11px"
         placeholder="Tap Show backup to copy your data out, or paste a backup here and tap Restore."></textarea>
       <div class="inline">
         <button id="doImport" style="flex:1;padding:10px 12px">Restore from box</button>
+        <button id="recheck" style="flex:1;padding:10px 12px">Check saving</button>
       </div>
     </div>`;
 
@@ -746,6 +811,19 @@ function renderBody(){
     checkStorage();
     toast(storageState.ok ? 'Saving fine' : 'Not saving — use the backup box');
     render();
+  };
+  document.getElementById('doSummary').onclick = ()=>{
+    if(!sessions.length){ toast('Log a session first'); return; }
+    const box = document.getElementById('dataBox');
+    box.value = buildSummary();
+    box.focus(); box.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(box.value)
+        .then(()=>toast('Summary copied — paste it to Claude'))
+        .catch(()=>toast('Selected — hold and tap Copy'));
+    }else{
+      toast('Selected — hold and tap Copy');
+    }
   };
   document.getElementById('doExport').onclick = ()=>{
     const box = document.getElementById('dataBox');
