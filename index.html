@@ -479,14 +479,18 @@ function topSet(sets){
   return best;
 }
 function setsText(sets, assist){
-  const byW = {};
-  sets.forEach(s=>{ if(s.w==null||s.r==null) return; (byW[s.w]=byW[s.w]||[]).push(s.r); });
-  return Object.keys(byW).map(w =>{
-    const n = +w;
+  // a Map keeps the order the sets were done in; a plain object reorders numeric keys
+  const byW = new Map();
+  sets.forEach(s=>{
+    if(s.w==null||s.r==null) return;
+    if(!byW.has(s.w)) byW.set(s.w, []);
+    byW.get(s.w).push(s.r);
+  });
+  return [...byW.entries()].map(([n, reps])=>{
     const label = assist
       ? (n===0 ? 'bodyweight' : n<0 ? `${Math.abs(n)} assist` : `+${n} kg`)
       : n;
-    return `${label}×${byW[w].join(',')}`;
+    return `${label}×${reps.join(',')}`;
   }).join(' · ');
 }
 
