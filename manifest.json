@@ -1,0 +1,10 @@
+{
+  "name": "Training Log",
+  "short_name": "Training",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EFF0EA",
+  "theme_color": "#EFF0EA"
+}
